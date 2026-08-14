@@ -1,0 +1,33 @@
+name: Validate Skill
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate distributable Skill
+        run: python3 tools/validate_skill.py skills/manage-obsidian-project-kb
+
+      - name: Verify MIT license
+        run: |
+          test -f LICENSE
+          grep -q '^MIT License$' LICENSE
+          grep -q '^Copyright (c) 2026 manage-obsidian-project-kb contributors$' LICENSE
+
+      - name: Run validator tests
+        run: python3 -m unittest discover -s tests -v

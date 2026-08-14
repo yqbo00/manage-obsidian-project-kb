@@ -1,0 +1,4 @@
+interface:
+  display_name: "Obsidian Project Knowledge Base"
+  short_description: "Manage Obsidian project memory across AI agents"
+  default_prompt: "Use $manage-obsidian-project-kb to initialize or synchronize this project knowledge base."
