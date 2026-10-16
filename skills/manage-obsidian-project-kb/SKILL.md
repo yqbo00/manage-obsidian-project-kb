@@ -1,6 +1,6 @@
 ---
 name: manage-obsidian-project-kb
-description: Manage cross-agent project context, shared rules, sprint progress, daily worklogs, and engineering knowledge in an Obsidian Vault. Use for /kb-init, /kb-upgrade, /kb-doctor, /kb-status, /kb-read, /kb-save and related knowledge-base workflows, including one-request upgrades of the installed skill, configured client bridges and existing rules for the current project, with Codex, ZCode, Claude Code or custom clients.
+description: Manage cross-agent project context, shared rules, sprint progress, daily worklogs, and engineering knowledge in an Obsidian Vault. Use for /kb-init, /kb-upgrade, /kb-doctor, /kb-status, /kb-read, /kb-save and related knowledge-base workflows, including one-request global skill upgrades and opt-in on-use migration of initialized projects, with Codex, ZCode, Claude Code or custom clients.
 ---
 
 # Cross-Agent Project Memory & Knowledge Base
@@ -79,7 +79,7 @@ description: Manage cross-agent project context, shared rules, sprint progress, 
 - 不得只依赖对话中缓存的配置；每次读写前重新读取文件。
 - `.ai/obsidian-kb.json` 是机器本地配置，不是可移植项目资产。Git 仓库中必须确认它未被跟踪且已被忽略；不得把真实绝对路径写进提交、知识笔记或示例。
 
-配置不存在时进入 `UNCONFIGURED` 状态并启动 `/kb-init`。配置非法或路径不可访问时进入 `DEGRADED` 状态：指出具体字段和原因，不猜测或覆盖，并建议 `/kb-init --reconfigure`。
+配置不存在时进入 `UNCONFIGURED` 状态并提供 `/kb-init` 向导；只读任务或自动迁移检查不得据此创建配置。配置非法或路径不可访问时进入 `DEGRADED` 状态：指出具体字段和原因，不猜测或覆盖，并建议 `/kb-init --reconfigure`。
 
 从配置派生：
 
@@ -233,6 +233,8 @@ Markdown 规则提供行为指导，不能代替权限、只读账号、CI 契�
 6. 任务涉及领域规则、架构、工程机制、基础设施、历史故障或自动化时，从任务提取 2–6 个关键词并隐式执行 `/kb-read`。
 7. 若文件缺失或互相冲突，明确报告；不得凭空推断进度或工作记录。
 
+在上述配置与适用规则核对后、业务修改前，按 `references/auto-migration.md` 检查当前安装的本机自动迁移授权。已启用时自动对账当前已初始化项目的桥接和规则；不联网、不重装全局包、不访问其他项目。只读任务只报告待迁移项，无变化零写入。不得把普通任务授权当作启用跨项目自动迁移的授权。
+
 执行设计或修改前简要说明会影响本次工作的规则及来源、例外或未解决条件，不逐轮重复整份规则清单。由查询转向修改、构建、部署、迁移或其他新范围时，在行动前补读新命中的规则。
 
 ### Task syntax and transitions
@@ -289,9 +291,11 @@ Worklog 是 Vault 级、按日期组织的追加式成果账本。自动记录�
 
 Slash 命令是跨 CLI 的逻辑协议。即使宿主未注册真正的 Slash Command，也按以下语义执行以 `/kb-` 开头的用户文本。
 
-### `/kb-upgrade [--check]`
+### `/kb-upgrade [--check] [--auto-migrate]`
 
 用户只需触发一次。读取 `references/upgrade.md`，连续完成来源/版本核对、完整 Skill 包更新、当前项目桥接更新、Shared 与当前项目规则的保守迁移、诊断和验收。不得完成一步就要求用户输入下一条命令。普通 `/kb-upgrade` 表示用户授权该升级范围内的备份和兼容性整理；不能推导为删除历史、降低规则强度或更新未指定的其他项目。含义不明确的规则保留兼容状态并汇总，权限审批仍遵循宿主机制。
+
+推荐全局安装用户一次执行 `/kb-upgrade --auto-migrate`：同时按 `references/auto-migration.md` 保存本机、当前物理安装、本次兼容协议的授权；以后在其他已初始化项目实际加载该 Skill 且允许写入时自动迁移，无需逐项目运行命令。独立安装与其他机器不自动更新；用户可以用自然语言关闭自动迁移。
 
 `--check` 只检查版本、影响范围和待迁移项，不安装、不写入、不创建备份或 Worklog。首次使用的旧版若不认识此命令，可由用户用自然语言提供发布来源，要求安装完整新版并接着执行升级；不要把 `/kb-upgrade` 描述为宿主内置命令或后台自动更新服务。
 

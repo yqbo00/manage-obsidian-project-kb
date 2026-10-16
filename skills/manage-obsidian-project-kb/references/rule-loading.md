@@ -53,4 +53,4 @@ Catalog 不复制规则行为正文，不作为第二个权威副本。修改规
 
 ## Migration
 
-先升级 Skill 与桥接（version 5），让旧 Mandatory 继续走兼容加载；已有项目执行 `/kb-init` 幂等更新所有已配置桥接。然后在用户授权的整理任务中逐条补齐 kind/load/triggers，核对正文适用条件并同步 Catalog。每次只改变有依据的规则，既有目录、配置和历史记录保持有效。
+先升级 Skill 与桥接（当前 version 6），让旧 Mandatory 继续走兼容加载。推荐一次 `/kb-upgrade --auto-migrate`，随后由 `references/auto-migration.md` 在使用已有项目时幂等对账桥接并迁移明确条件的规则，无需逐项目执行命令。未启用自动迁移时仍可显式升级，或用 `/kb-init` 仅对账桥接。在已授权范围内逐条补齐 kind/load/triggers，核对正文适用条件并同步 Catalog；每次只改变有依据的规则，既有目录、配置和历史记录保持有效。

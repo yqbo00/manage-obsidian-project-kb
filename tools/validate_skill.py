@@ -85,6 +85,7 @@ def validate(skill_dir: Path) -> list[str]:
         "references/agent-adapters.md",
         "references/rule-loading.md",
         "references/upgrade.md",
+        "references/auto-migration.md",
         "references/markdown-templates.md",
     ]
     for relative in required:

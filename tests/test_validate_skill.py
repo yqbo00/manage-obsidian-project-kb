@@ -73,6 +73,14 @@ class ValidateSkillTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("missing required resource: references/agent-adapters.md", result.stderr)
 
+    def test_incomplete_auto_migration_package_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target = self.copy_skill(Path(temporary))
+            (target / "references" / "auto-migration.md").unlink()
+            result = self.run_validator(target)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing required resource: references/auto-migration.md", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

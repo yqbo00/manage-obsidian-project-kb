@@ -24,7 +24,7 @@
 │       ├── SKILL.md
 │       ├── agents/openai.yaml
 │       ├── assets/{AGENTS-bridge.md,agent-import-bridge.md}
-│       └── references/{agent-adapters.md,rule-loading.md,upgrade.md,markdown-templates.md}
+│       └── references/{agent-adapters.md,rule-loading.md,upgrade.md,auto-migration.md,markdown-templates.md}
 ├── tests/
 └── tools/validate_skill.py
 ```
@@ -90,7 +90,7 @@ Agent 会询问 Obsidian Vault 路径和项目名称，并在项目根目录创�
 
 ## 规则按需加载与升级
 
-已有项目与知识库的用户请按 [本次版本升级手册：规则按需加载（桥接协议 v5）](docs/upgrades/rule-loading-v5.md) 操作，包含客户端更新、项目桥接升级、共享/项目规则整理、验收与回退。
+已有项目与知识库的用户请看 [本次版本升级手册：规则按需加载与自动迁移（桥接协议 v6）](docs/upgrades/rule-loading-v5.md)。**同一份全局 Skill 更新一次，其他已初始化项目在后续使用时自动迁移，不需要逐项目输入升级命令。**
 
 **旧用户请直接复制下面这段提示词。旧版还没有 `/kb-upgrade`，需要先由 Agent 安装新版，再继续升级项目：**
 
@@ -103,12 +103,18 @@ manage-obsidian-project-kb 安装副本。修改前备份，保留本地定制�
 确认新版已定义 /kb-upgrade，再继续完成当前项目桥接、关联 Shared
 和项目知识库规则的升级，并验证结果。
 
+同时启用并保存本机当前安装的自动迁移授权：后续在其他已初始化
+项目使用这份 Skill 且允许写入时，自动完成本次协议的桥接和规则
+兼容迁移；只读任务只检查，不扫描所有仓库，不重复下载安装。
+
 不要仅执行旧版 /kb-init，也不要在下载安装新版后停止。
 无法确定的规则保留原状，最后报告实际加载路径、获取的提交 ID、
 桥接版本、已完成的迁移和剩余事项。
 ```
 
-已安装支持升级命令的新版后，后续才可简写为 `使用 manage-obsidian-project-kb 执行 /kb-upgrade`；`/kb-upgrade --check` 只检查不修改。Agent 连续完成版本检查、安装、桥接、规则整理和验收，不需要用户逐步发送命令。不明确的规则保留兼容状态，最后汇总；网络和写入权限仍由客户端控制。
+已安装支持自动迁移的新版后，可简写为 `使用 manage-obsidian-project-kb 执行 /kb-upgrade --auto-migrate`，一次更新并启用后续项目自动迁移；`/kb-upgrade --check` 只检查不修改。Agent 连续完成版本检查、安装、桥接、规则整理和验收，不需要用户逐步发送命令。不明确的规则保留兼容状态，最后汇总；网络和写入权限仍由客户端控制。
+
+自动迁移需要实际加载 Skill，不是打开目录就运行的后台程序。授权保存在本机状态目录，独立安装/其他机器需分别启用；只读任务不迁移，未初始化项目不自动绑定。仅复制文件或普通 `/kb-init` 不会静默开启跨项目写入。可随时要求“关闭当前安装的知识库自动迁移”。
 
 `Mandatory` 表示命中适用条件后必须遵守；`applies_to: ["*"]` 仅表示跨项目适用。规则用 `load: Always | Conditional` 表示加载时机，Conditional 用 `triggers` 写完整适用条件。启动先读 Rule Catalog 并核对来源元数据，再读常驻/命中规则正文；由查询转为修改、构建、部署等操作前重新筛选。一般知识的 5 篇检索限制不适用于命中规则。
 
@@ -116,9 +122,9 @@ manage-obsidian-project-kb 安装副本。修改前备份，保留本地定制�
 
 升级不改变配置 Schema 2：
 
-1. 更新客户端安装的完整 Skill 包，在已有项目执行 `/kb-init`，将已配置的桥接区块幂等更新至 version 5。
+1. 使用上述一次升级入口更新完整 Skill 包并启用自动迁移；当前项目立即对账，其他已初始化项目使用时自动更新桥接至 version 6，无需逐项目执行 `/kb-init`。
 2. 旧 Mandatory 缺少 load 时继续全文加载，避免静默漏读；旧 Index 缺少 Rule Catalog 时从笔记头部发现规则。
-3. 授权 Agent 整理规则时，再逐条明确 kind/load/triggers 并同步 Catalog；普通初始化不会批量改变历史规则范围或强度。
+3. 已授权的升级/自动迁移逐条明确有依据的 kind/load/triggers 并同步 Catalog；歧义项保留兼容状态，普通初始化不会批量改变历史规则范围或强度。
 
 重复初始化仍须零无效写入。Markdown 只能指导行为，权限和兼容性等要求应配合实际账号限制、CI 检查或其他执行控制。
 
@@ -128,7 +134,7 @@ manage-obsidian-project-kb 安装副本。修改前备份，保留本地定制�
 
 | Command | Purpose |
 |---|---|
-| `/kb-upgrade [--check]` | 一次请求完成当前安装、项目桥接与知识规则升级；可只读预检 |
+| `/kb-upgrade [--check] [--auto-migrate]` | 一次升级；可启用其他项目使用时自动迁移，或只读预检 |
 | `/kb-init` | 初始化或幂等升级配置、Vault 目录和 Agent Adapter 桥接 |
 | `/kb-init --agents` | 仅选择和对账 Agent 客户端，不修改 Vault 设置 |
 | `/kb-doctor` | 只读检查配置、桥接、锁、索引和本地路径安全 |

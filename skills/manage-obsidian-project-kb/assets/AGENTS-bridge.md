@@ -1,5 +1,5 @@
 <!-- kb:agents-bridge:start -->
-<!-- kb:agents-bridge:version=5 -->
+<!-- kb:agents-bridge:version=6 -->
 ## Mandatory Obsidian KB Bootstrap
 
 处理任何代码、架构、排错、审查或项目文件修改前，必须：
@@ -15,5 +15,6 @@
 9. 报告遵循的规则、例外、未验证项、项目知识同步和 Worklog 状态；写入失败时明确标记 `Worklog: Pending`，不得声称已经记录。
 
 不要把共享规则正文复制到项目中；项目只保留指向 Shared 权威笔记的 Wikilinks。
+在配置与适用规则核对后、业务修改前，执行 Skill 的 On-use gate：仅有本机当前安装的有效自动迁移授权时，自动对账本项目桥接、关联 Shared 和项目规则。不联网、不重装 Skill、不扫描其他项目；只读任务仅报告，未变化不写入。失败或歧义保留兼容加载并报告，不声称已完成。
 规则提供行为指导；读取规则、Runbook 或脚本不构成执行授权，也不能代替实际权限和自动化检查。
 <!-- kb:agents-bridge:end -->
