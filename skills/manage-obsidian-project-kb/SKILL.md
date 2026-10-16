@@ -1,6 +1,6 @@
 ---
 name: manage-obsidian-project-kb
-description: Manage cross-agent project context, shared multi-project rules, sprint progress, daily cross-project worklogs, architecture decisions, engineering knowledge, infrastructure notes, troubleshooting records, and AI automation assets in an Obsidian Vault. Use when an AI CLI agent must initialize or mount project and shared knowledge, install a Codex- and ZCode-compatible repository instruction bridge, align with current work, automatically record verified outcomes before finishing, inspect or diagnose knowledge-base health and daily activity, generate date-range reports, retrieve prior context, save reusable knowledge, synchronize tasks, maintain Wikilinks, or deprecate notes through /kb-init, /kb-doctor, /kb-status, /kb-today, /kb-report, /kb-log, /kb-read, /kb-save, and related workflows.
+description: Manage cross-agent project context, shared rules, sprint progress, daily worklogs, and engineering knowledge in an Obsidian Vault. Use for /kb-init, /kb-upgrade, /kb-doctor, /kb-status, /kb-read, /kb-save and related knowledge-base workflows, including one-request upgrades of the installed skill, configured client bridges and existing rules for the current project, with Codex, ZCode, Claude Code or custom clients.
 ---
 
 # Cross-Agent Project Memory & Knowledge Base
@@ -19,6 +19,7 @@ description: Manage cross-agent project context, shared multi-project rules, spr
 - 任务进度可核验、可追溯，并与实际代码或验证结果保持一致。
 - 领域模型、架构决策、工程实践、基础设施和故障经验各归其位。
 - 公共规则、技术基线和跨项目经验只有一个共享权威副本，项目通过 Wikilinks 复用。
+- 区分规则强度与加载时机：常驻规则保持精简，条件规则在任务命中时加载，并在操作范围变化时重新判断。
 - 每次有意义的工作在 Agent 最终回复前自动进入按日期组织的跨项目 Worklog，使开发者无需逐项目翻找即可回顾成果、进展和阻塞。
 - 长期知识采用原子笔记和 Obsidian Wikilinks 组织，避免巨型流水账。
 - 历史方案不丢失，过期知识不再被误用为当前事实。
@@ -55,22 +56,25 @@ description: Manage cross-agent project context, shared multi-project rules, spr
 
 ```json
 {
-  "Schema_Version": 1,
+  "Schema_Version": 2,
   "Vault_Path": "/absolute/path/to/obsidian-vault",
   "Project_Name": "example-project",
   "Current_Sprint": "05-Roadmap_&_Tasks/Current_Sprint.md",
   "Shared_KB": "Shared",
-  "Worklog_KB": "Worklog"
+  "Worklog_KB": "Worklog",
+  "Agent_Clients": ["codex", "zcode"],
+  "Custom_Agent_Bridges": []
 }
 ```
 
 验证要求：
 
-- `Schema_Version` 是整数 `1`。缺失时视为旧版 Schema 0：读取仍有效，普通 `/kb-init` 可在创建本地备份后迁移为当前版本；高于当前支持版本时进入 `DEGRADED`，不得降级或猜测字段语义。
+- `Schema_Version` 是整数 `2`。缺失时视为旧版 Schema 0；Schema 0/1 读取仍有效，普通 `/kb-init` 可在创建本地备份后一次性迁移。Schema 1 迁移时默认 `Agent_Clients` 为 `["codex", "zcode"]`，`Custom_Agent_Bridges` 为空，以保持旧行为。高于当前支持版本时进入 `DEGRADED`，不得降级或猜测字段语义。
 - `Vault_Path` 是规范化绝对目录路径。
 - `Project_Name` 非空，且不含 `/`、`\\`、`..` 路径段、控制字符或目录穿越内容。
 - `Current_Sprint` 是相对于 `Projects/{Project_Name}/` 且位于 `05-Roadmap_&_Tasks/` 内的 `.md` 路径，不得是绝对路径，不得包含 `..`；规范化后仍必须位于 `Project_KB` 内。默认值为 `05-Roadmap_&_Tasks/Current_Sprint.md`。
 - `Shared_KB` 与 `Worklog_KB` 是相对于 `Vault_Path` 的安全目录路径，默认值分别为 `Shared` 和 `Worklog`；规范化后仍必须位于 Vault 内，且不得互相重叠或与 `{Vault_Path}/Projects` 重叠。旧配置缺少任一字段时保持有效并使用默认值，下次 `/kb-init` 可在备份配置后补齐。
+- `Agent_Clients` 是去重后的内置适配器 ID 数组，只允许 `codex`、`zcode`、`claude-code`；顺序按此固定次序规范化。`Custom_Agent_Bridges` 是自定义适配器数组。完整字段、模式和边界见 `references/agent-adapters.md`；处理 `/kb-init`、`/kb-doctor`、`/kb-status` 或客户端变更时必须完整读取该文件。
 - 配置不得包含密钥、令牌、密码、个人敏感信息或 Agent 私有会话状态。
 - 不得只依赖对话中缓存的配置；每次读写前重新读取文件。
 - `.ai/obsidian-kb.json` 是机器本地配置，不是可移植项目资产。Git 仓库中必须确认它未被跟踪且已被忽略；不得把真实绝对路径写进提交、知识笔记或示例。
@@ -110,6 +114,8 @@ DailyWorklog  = {WorklogRoot}/Daily/{YYYY}/{YYYY-MM}/{YYYY-MM-DD}.md
   `scope` 只允许 `project`、`shared` 或 `worklog`。释放前核对 `operation_id`；只释放本次操作创建且仍由自己持有的锁。
 - 锁已存在时读取并报告 owner 元数据，有限重试后停止写入。锁归属不明、元数据损坏或 Agent 异常退出时不得按时间自动删除；使用 `/kb-doctor` 诊断，并仅在用户显式确认没有活跃写入后执行指定范围的清锁。
 - 首次初始化可在获锁前执行幂等 `mkdir`；任何 Markdown 写入必须在获锁后完成。
+- 所有初始化都按“读取 → 验证 → 计算期望状态 → 比较 → 仅在有差异时写入 → 读回”的声明式对账执行。目录已存在、配置语义一致、桥接区块字节一致或索引链接已存在时必须是 no-op：不创建备份、不更新时间戳、不调整用户文本。不得通过盲目追加实现初始化。
+- 同一物理目标文件只对账一次。多个客户端共享 `AGENTS.md` 时先按规范化绝对路径合并目标；同一自定义 `Id`、同一目标上的冲突模式或冲突导入行视为配置错误并停止相关目标，不得按数组顺序覆盖。
 - 若发现旧版 `01-Architecture/`、`02-TechStack/` 或 `03-Troubleshooting/`，保留原目录和文件，只报告迁移建议。未获得用户明确指令时不得自动移动、复制或删除旧知识。
 
 ### Knowledge quality and security
@@ -182,9 +188,17 @@ DailyWorklog  = {WorklogRoot}/Daily/{YYYY}/{YYYY-MM}/{YYYY-MM-DD}.md
 | `50-Troubleshooting_&_Lessons/` | 已在多个项目验证的故障模式和组织级复盘 |
 | `60-AI_&_Automation/` | 公共提示词、Agent 规则、CLI 工作流和自动化资产 |
 
-- 共享笔记使用 `applies_to` 声明明确项目名或 `"*"`，使用 `enforcement: Mandatory | Default | Advisory` 声明约束强度。
-- `Mandatory` 必须遵守；例外必须由项目笔记显式记录批准依据并反向链接。Active 项目笔记可覆盖 `Default`，`Advisory` 仅供参考。冲突必须向用户展示，不得静默选择。
+- 共享笔记使用 `applies_to` 声明明确项目名或 `"*"`。规则使用 `enforcement: Mandatory | Default | Advisory` 声明约束强度，使用 `load: Always | Conditional` 与 `triggers` 声明加载时机；跨项目适用不等于每次任务都适用。
+- 命中适用条件的 `Mandatory` 必须遵守；例外须记录批准依据、范围和结束条件并反向链接，不改变全局规则。Active 项目决策可覆盖 `Default`，`Advisory` 仅供参考。冲突必须向用户展示，不得静默选择。
 - 只对两个及以上项目稳定复用的知识、公共契约或明确的组织规则使用共享层。单项目事实继续保存于项目层；不得复制共享正文到各项目。
+
+### Rule loading and knowledge types
+
+首次执行启动对齐、保存规则或诊断规则目录时，读取 `references/rule-loading.md`。正文与 Frontmatter 是权威来源，Index 中的 Rule Catalog 只保存来源链接与适用条件摘要。筛选元数据后，完整加载适用的常驻规则、命中的条件规则和旧 Mandatory 兼容项；不要用一般知识检索的篇数限制截断规则。条件不清楚时读取正文确认，不能默认跳过。任务范围、目标路径或拟执行操作变化时重新筛选。
+
+保存前按 `kind` 区分 `Rule`、`Contract`、`ADR`、`Runbook`、`Knowledge`、`Asset`，继续按现有目录主题归档；阶段范围、待办、阻塞与验证结果留在事项文档、Sprint 和 Worklog。只有 Rule 使用专用规则正文，其他类型保持其工程事实、决策或步骤结构。旧笔记无需批量补字段。
+
+Markdown 规则提供行为指导，不能代替权限、只读账号、CI 契约检查或迁移校验。记录已有技术控制和验证证据，不因文档写了“必须”就声称已经强制执行；读取 Runbook 或脚本本身不构成执行授权。
 
 ### File and Wikilink rules
 
@@ -212,12 +226,14 @@ DailyWorklog  = {WorklogRoot}/Daily/{YYYY}/{YYYY-MM}/{YYYY-MM-DD}.md
 处理任何项目开发任务前：
 
 1. 读取并验证配置。
-2. 读取 Shared Index，完整加载所有 `status: Active`、`enforcement: Mandatory` 且 `applies_to` 含 `"*"` 或当前 `Project_Name` 的共享笔记。
+2. 按 Rule loading 协议读取 Shared Index 与项目 Rule Catalog，核对候选元数据，加载适用的 Active 常驻规则、任务命中的条件规则及缺少加载条件的旧 Mandatory。筛选同时考虑项目、模块路径、任务与计划操作；普通知识按需检索。
 3. 读取项目 `00-Index.md` 的进度区、配置指定的 `Current_Sprint`，以及今日 Daily Worklog 中当前项目的条目；提取目标、Milestone、所有 `- [/]`、Blockers、相关 `- [ ]` 和今日已记录成果。
 4. 对照今天已完成的 Sprint 条目、Dashboard 最近完成项及其直接链接的永久笔记 Change Log 与 Worklog Event ID，识别上次会话可能漏记的确定性成果；不要无界扫描项目知识树。只读任务仅报告待补录项；获得项目写入授权的开发任务可按 `/kb-log --reconcile` 规则补录。
 5. 向当前对话注入精炼状态：当前目标、进行中任务、阻塞项、今日成果和相关知识链接。
 6. 任务涉及领域规则、架构、工程机制、基础设施、历史故障或自动化时，从任务提取 2–6 个关键词并隐式执行 `/kb-read`。
 7. 若文件缺失或互相冲突，明确报告；不得凭空推断进度或工作记录。
+
+执行设计或修改前简要说明会影响本次工作的规则及来源、例外或未解决条件，不逐轮重复整份规则清单。由查询转向修改、构建、部署、迁移或其他新范围时，在行动前补读新命中的规则。
 
 ### Task syntax and transitions
 
@@ -273,19 +289,27 @@ Worklog 是 Vault 级、按日期组织的追加式成果账本。自动记录�
 
 Slash 命令是跨 CLI 的逻辑协议。即使宿主未注册真正的 Slash Command，也按以下语义执行以 `/kb-` 开头的用户文本。
 
-### `/kb-init`
+### `/kb-upgrade [--check]`
+
+用户只需触发一次。读取 `references/upgrade.md`，连续完成来源/版本核对、完整 Skill 包更新、当前项目桥接更新、Shared 与当前项目规则的保守迁移、诊断和验收。不得完成一步就要求用户输入下一条命令。普通 `/kb-upgrade` 表示用户授权该升级范围内的备份和兼容性整理；不能推导为删除历史、降低规则强度或更新未指定的其他项目。含义不明确的规则保留兼容状态并汇总，权限审批仍遵循宿主机制。
+
+`--check` 只检查版本、影响范围和待迁移项，不安装、不写入、不创建备份或 Worklog。首次使用的旧版若不认识此命令，可由用户用自然语言提供发布来源，要求安装完整新版并接着执行升级；不要把 `/kb-upgrade` 描述为宿主内置命令或后台自动更新服务。
+
+### `/kb-init [--agents | --reconfigure]`
 
 1. 解析 `{Project_Root}` 并检查 `.ai/obsidian-kb.json`。
-2. 配置不存在时，询问 `Vault_Path`；把项目根目录名作为 `Project_Name` 默认值。`Current_Sprint`、`Shared_KB` 和 `Worklog_KB` 分别默认使用 `05-Roadmap_&_Tasks/Current_Sprint.md`、`Shared` 和 `Worklog`，写入当前 `Schema_Version`。
+2. 完整读取 `references/agent-adapters.md`。配置不存在时，询问 `Vault_Path`；把项目根目录名作为 `Project_Name` 默认值。`Current_Sprint`、`Shared_KB` 和 `Worklog_KB` 分别使用默认值，并让用户确认自动检测建议的客户端集合；检测只能提供建议，不得静默启用客户端。允许选择内置 `codex`、`zcode`、`claude-code`，以及登记一个或多个 `custom` 适配器。写入当前 Schema。
 3. 将相对 Vault 路径或 `~` 解析成宿主平台的绝对路径并确认。Vault 不存在时先询问是否创建；需要额外权限时走宿主审批。
 4. 若属于 Git 仓库，在任何真实路径写入前检查 `.ai/obsidian-kb.json` 是否已被跟踪或忽略。已跟踪时警告并停止初始化，交由用户决定如何从索引移除；未跟踪且未忽略时，通过 `git rev-parse --git-path info/exclude` 定位仓库本地 exclude，先读后局部追加 `/.ai/obsidian-kb.json` 与 `/.ai/kb-backups/`，不得擅自改写项目 `.gitignore`。
-5. 使用内置写入工具创建配置；回退 Shell 仅用于标准目录和文件操作。所有路径都必须引用，例如 `mkdir -p "{Project_Root}/.ai"`。升级旧配置或修改既有受管理文件前，把原文件保存到不覆盖的 `.ai/kb-backups/{config|agents}/` 时间戳文件。
+5. 使用内置写入工具创建配置；回退 Shell 仅用于标准目录和文件操作。所有路径都必须引用，例如 `mkdir -p "{Project_Root}/.ai"`。先规范化数组、字段顺序和默认值，再进行语义比较。只有升级、重配置或修复确实会改变内容时，才把原文件保存到不覆盖的 `.ai/kb-backups/{config|agents}/` 时间戳文件；内容不变时不得重写或备份。
 6. 完整读取 `references/markdown-templates.md`，幂等创建项目树、Shared 树、Worklog 的 `Daily/`、`Reports/Weekly/`、`Reports/Monthly/`、`Reports/Custom/` 和项目 `Archive/`；按固定锁顺序只创建缺失的 Project Dashboard、Shared Index、Current Sprint 与 Worklog Index，并在项目 Dashboard 缺少 Worklog 入口时局部补充链接。
-7. 完整读取随 Skill 提供的 `assets/AGENTS-bridge.md`，把其中带 `<!-- kb:agents-bridge:start -->`/`end` 标记的同一受管理区块安装到以下根级目标：始终安装到 `{Project_Root}/AGENTS.md` 以兼容 ZCode 与 Codex；若 `{Project_Root}/AGENTS.override.md` 已存在且非空，再同步安装到该文件以兼容 Codex 的 override 优先级。不得为此新建空的 override 文件。
-8. 对每个桥接目标独立执行：文件不存在则创建；存在但无标记则仅追加；恰有一组标记则只更新区块内部。修改既有文件前先创建本地时间戳备份；标记缺失、嵌套、重复或目标符号链接逃逸项目根时只停止该目标并报告，不得让另一个目标的成功掩盖失败。
-9. 读回配置、三个索引、Current Sprint、目录树、Git 本地忽略状态、Dashboard Worklog 链接，以及 `AGENTS.md` 和适用的 `AGENTS.override.md` 桥接区块；只在验证成功后报告初始化完成。
+7. 完整读取 `assets/AGENTS-bridge.md` 和 `assets/agent-import-bridge.md`，根据已配置适配器生成去重后的目标清单并按 `references/agent-adapters.md` 对账。Codex/ZCode 和 `CanonicalAGENTS` 共用 `{Project_Root}/AGENTS.md`；仅在启用 Codex 且非空 `AGENTS.override.md` 已存在时同步它；Claude Code 使用根级 `CLAUDE.md` 中受管理的 `@AGENTS.md` 导入；Custom 按其模式处理。不得创建无用途的 override 文件。
+8. 对每个目标独立执行：不存在则创建；存在且无本 Skill 标记时仅在末尾追加一个分隔良好的区块；恰有一组匹配标记时只在区块内容过期时替换整个标记区间。完全一致时 no-op。修改既有文件前才创建一次本地时间戳备份；标记缺失一端、嵌套、重复、ID 不匹配、目标冲突或符号链接逃逸项目根时停止该目标并报告。任何失败都不得被其他目标的成功掩盖。
+9. 读回配置、三个索引、Current Sprint、目录树、Git 本地忽略状态、Dashboard Worklog 链接和所有已配置适配器目标；逐项验证唯一标记、期望内容、未触碰区内容及 no-op 结论，只在全部必要目标成功后报告初始化完成。
 
-普通 `/kb-init` 不改写既有合法内容，但可在备份配置后补齐 `Shared_KB`、`Worklog_KB`、对应目录树及缺失/过期的受管理桥接区块。只有 `/kb-init --reconfigure` 才可改变既有配置值。发现旧目录时只报告，不自动迁移。
+普通 `/kb-init` 不改变既有合法配置选择，但可幂等迁移旧 Schema、补齐目录树及缺失/过期的受管理区块。`/kb-init --agents` 只重新选择和对账 Agent 适配器，不改变 Vault、项目名或知识目录；移除客户端只停止维护其桥接，默认保留历史文件和区块，除非用户明确要求非破坏性移除对应托管区块。只有 `/kb-init --reconfigure` 才可改变其他配置值。发现旧目录时只报告，不自动迁移。
+
+规则加载升级不改变配置 Schema 2。更新桥接后仍按旧 Mandatory 兼容策略运行；普通初始化不批量改写历史规则的 `kind`、`load`、`triggers` 或强度。仅在用户授权整理规则时，逐条核对并更新笔记与 Catalog，不能只改索引来缩小规则范围。
 
 ### `/kb-doctor [--clear-lock project|shared|worklog]`
 
@@ -293,9 +317,10 @@ Slash 命令是跨 CLI 的逻辑协议。即使宿主未注册真正的 Slash Co
 
 1. 检查配置 Schema、路径边界、Vault 可访问性，以及本地配置是否被 Git 跟踪或遗漏忽略。
 2. 检查项目、Shared、Worklog 目录与索引、Current Sprint、必要 Frontmatter 和受管理区块。
-3. 始终检查根目录 `AGENTS.md`；存在非空 `AGENTS.override.md` 时同时检查，报告桥接版本、重复/破损标记和两份区块是否一致。
+3. 按配置检查所有内置与自定义适配器目标，报告模式、桥接版本、重复/破损标记、目标冲突和期望内容差异；只检查启用 Codex 时适用的非空 `AGENTS.override.md`。未配置客户端不得误报为故障。
 4. 检查三个锁目录和 `owner.json`，报告 scope、operation ID、创建时间与可能的孤儿锁，但不按年龄推断无人使用。
 5. 对索引链接执行有界存在性检查并汇总断链；不递归读取整个 Vault 正文。
+6. 按 `references/rule-loading.md` 检查 Rule Catalog 遗漏/过期、非法加载字段、旧 Mandatory 兼容项和重复/冲突候选。只读报告，文本相似或日期较旧不足以自动合并、废弃或改变适用范围。
 
 只有用户显式指定 `--clear-lock` 并确认对应范围没有活跃写入时，才可再次核对锁路径、展示 owner 信息并删除该锁目录；目录包含非锁元数据文件、路径逃逸预期根目录或确认不明确时拒绝操作。其他修复通过 `/kb-init` 或精确命令完成。
 
@@ -307,9 +332,9 @@ Slash 命令是跨 CLI 的逻辑协议。即使宿主未注册真正的 Slash Co
 - 所有进行中任务、最高优先级未开始任务和 Blockers。
 - 最近完成项及其验证或知识链接。
 - Dashboard/Sprint 不一致、缺失链接或配置异常。
-- 当前项目适用的 Mandatory 共享规则和共享层健康状态。
+- 当前常驻/命中规则、旧 Mandatory 兼容项和共享层健康状态；没有开发任务时不假设部署等条件已触发，也不加载所有条件规则全文。
 - 今日当前项目的 Worklog 成果、进展、Blocker、待补录项和 Worklog 层健康状态。
-- 根目录 `AGENTS.md` 中桥接区块的存在性、版本和标记完整性；存在非空 `AGENTS.override.md` 时同时报告其状态以及两份区块是否一致。
+- 每个已配置 Agent 适配器的模式、目标、桥接版本、标记完整性和同步状态；合并报告共享同一物理目标的客户端。
 - 基于依赖、优先级和 Blockers 给出的下一步建议，并明确标注为建议而非既定任务。
 
 不得在 `/kb-status` 中静默修改文件；需要同步时先说明并在用户任务授权范围内执行进度更新。
@@ -339,7 +364,7 @@ Slash 命令是跨 CLI 的逻辑协议。即使宿主未注册真正的 Slash Co
      -exec grep -nHiF -- "{Keyword}" {} +
    ```
 
-4. 读取候选 Frontmatter、命中上下文和必要正文，按 Wikilink 最多扩展一跳。默认最多注入 5 篇最相关文档，避免无界读取整个 Vault。
+4. 读取候选 Frontmatter、命中上下文和必要正文，按 Wikilink 最多扩展一跳。普通知识默认最多注入 5 篇最相关文档；该限制及一跳限制不适用于已命中规则和其执行所必需的引用。规则按 Rule loading 协议单独加载，不能用 top-k 检索代替规则筛选。
 5. 优先使用 `status: Active` 且 `applies_to` 匹配的共享知识；按 Mandatory、项目显式覆盖、Default、Advisory 的顺序处理。把 Draft 标为未验证，Deprecated 仅作历史背景。
 6. 注入摘要必须包含结论、适用条件、状态和项目相对来源路径。未命中时明确说明。
 
@@ -350,14 +375,14 @@ Slash 命令是跨 CLI 的逻辑协议。即使宿主未注册真正的 Slash Co
 完成重要工作后自动视为触发；用户只说 `/kb-save` 即可，能够从上下文推断时不得要求其补充标题、分类、状态或 Index 同步步骤。临时讨论、原始日志和敏感数据不自动保存；具有长期价值但尚未验证的结论可保存为 `Draft`。
 
 1. 重新读取配置、Project/Shared/Worklog 索引、今日 Daily Worklog、Current Sprint 和潜在重复笔记。默认写入项目层；只有用户显式使用 `--shared` 或确认提升为共享知识时才写入 Shared。
-2. 把项目内容提炼为单一可复用主题，并路由到 `10–60`：
+2. 先按 Rule loading and knowledge types 判断内容类型；临时状态只更新事项文档/Sprint/Worklog。将永久内容提炼为单一可复用主题，填写 `kind` 并路由到 `10–60`：
    - 领域模型、业务规则、状态机、API 契约 → `10-Domain_&_Business`
    - 架构、拓扑、边界、接口、ADR → `20-Architecture_&_ADR`
    - 框架机制、并发、性能、工程实践 → `30-Engineering_&_Tuning`
    - K8s、CI/CD、IaC、数据库/缓存/日志基础设施 → `40-Infra_&_DevOps`
    - Bug、异常、根因、修复、验证、复盘 → `50-Troubleshooting`
    - AI 提示词、CLI 工作流、Agent 配置、自动化脚本 → `60-AI_&_Automation`
-3. `--shared` 按 Shared routing 保存，并必须填写 `applies_to` 与 `enforcement`。基于单项目得出的候选经验先保存为项目 Draft，不得自动提升为公共规则。
+3. `--shared` 按 Shared routing 保存，填写 `applies_to`；Rule 还须填写 `enforcement`、`load` 和 Conditional 的非空 `triggers`，使用规则模板。其他新笔记不默认赋予规则强度。按 `references/rule-loading.md` 检查规则稳定性、可执行性、重复来源与阶段例外；单次经验先作为候选，用户明确制定的长期规则不要求重复出现。全局提升须有用户明确授权，已有明确授权无需再次询问。
 4. 先从代码、测试、运行结果、配置核对、用户确认和既有笔记自动判定状态，再判断是追加同一事件、创建新原子笔记，还是在证据明确时新建替代方案并废弃旧笔记；仅按上述知识状态歧义规则询问用户。
 5. 获得对应锁后最小写入；状态变化时同步 Frontmatter、Change Log 和对应 Index 状态。项目使用共享知识时在 Dashboard 建立链接；若关联当前任务，只补齐 Completion synchronization 中尚未执行的任务/Dashboard 子步骤，不得递归进入 `/kb-save` 或重复落账。
 6. 读回所有修改文件并释放锁；随后按 Automatic Worklog 对本次知识成果去重落账。报告保存路径、分类、状态、任务/索引/Worklog 同步；只有验证成功后才声称已保存。
@@ -372,7 +397,8 @@ Slash 命令是跨 CLI 的逻辑协议。即使宿主未注册真正的 Slash Co
 - Worklog Index 链接 Daily 和显式保存的 Reports；Daily 事件链接项目任务或知识证据，但项目文档不反向维护每日事件清单。
 - 原子笔记之间只建立有语义的链接，例如“依赖”“实现”“取代”“故障表现”或“验证”。
 - Dashboard 的任务状态只来自 Current Sprint；永久知识入口只来自真实文件。
-- 项目 Index 条目格式为 `- [[路径|标题]] — 摘要（Status）`；Shared Index 额外标注 `Enforcement; applies_to`。
+- 项目 Index 条目格式为 `- [[路径|标题]] — 摘要（Status）`；Shared Index 额外标注 `applies_to`，Rule Catalog 按规则协议投影强度、加载条件与来源。非规则知识不默认标记为 Mandatory。
+- 修改规则时，在同一次受锁写入中同步来源 Frontmatter、正文、Change Log 与对应 Rule Catalog；目录缺失时只添加一次托管区块，内容不变时 no-op。部分失败须报告，读取时回到来源核对。
 - 新增前按规范化路径去重。笔记废弃时保留条目并标记替代链接，不删除历史入口。
 - 保护用户手写说明、Dataview 和自定义区块；只修改目标标题下的必要内容，不整体重新生成 Dashboard。
 
@@ -386,11 +412,12 @@ Slash 命令是跨 CLI 的逻辑协议。即使宿主未注册真正的 Slash Co
 
 - 已从当前项目 `.ai/obsidian-kb.json` 读取并验证配置及 Shared、Worklog 路径。
 - Agent 启动或开发任务开始时已读取 Shared Index、Dashboard 进度区、Current Sprint 和今日当前项目 Worklog。
+- 已根据任务和计划操作加载常驻、命中及兼容规则；任务范围变化后已复核，未因检索篇数限制漏读 Mandatory，未把过期目录摘要当作权威。
 - 检索结果包含真实来源与状态，未命中时没有伪造。
 - 写入内容路由正确、Frontmatter 完整、信息脱敏并含有效 Wikilinks。
 - 笔记状态已根据证据自动判定；状态变化已同步 Frontmatter、Change Log 与 Index，未把普通状态维护转嫁给用户。
 - 共享写入已明确适用范围与约束强度，且不是从单项目事实擅自提升。
-- `/kb-init` 已保留原有项目指令，并读回验证根目录 `AGENTS.md` 中唯一、完整的桥接区块；存在非空 `AGENTS.override.md` 时也已验证其中的同步区块。
+- `/kb-init` 已保留全部非托管项目指令，并读回验证所有已配置适配器目标中的唯一完整桥接区块；重复执行无差异时未重写文件或产生备份。
 - 完成任务已在 Current Sprint 中按 ID 和日期更新，并同步 Dashboard；无法匹配时未误改任务。
 - 有意义的成果、进展或 Blocker 已在最终回复前按稳定 Event ID 写入当天 Worklog 并同步 Summary/Index，或明确报告 `Worklog: Pending`；只读任务与过程噪音未被记录。
 - 历史内容未被删除或整文件覆盖，旧目录未被擅自迁移。

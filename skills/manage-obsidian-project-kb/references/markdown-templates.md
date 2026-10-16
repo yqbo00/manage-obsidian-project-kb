@@ -8,6 +8,8 @@
 - [Permanent atomic note](#permanent-atomic-note)
 - [Shared index](#shared-index)
 - [Shared atomic note](#shared-atomic-note)
+- [Rule note](#rule-note)
+- [Rule Catalog](#rule-catalog)
 - [Worklog index](#worklog-index)
 - [Daily Worklog](#daily-worklog)
 - [Saved Worklog report](#saved-worklog-report)
@@ -15,7 +17,7 @@
 ## Template rules
 
 - 替换所有占位符；没有真实别名时使用 `aliases: []`，没有真实关联时删除对应占位行。
-- 永久笔记必须包含 `title`、`date`、`project`、`category`、`tags`、`status` 和 `aliases`。共享笔记还必须包含 `scope`、`applies_to` 和 `enforcement`。
+- 新永久笔记必须包含 `title`、`date`、`project`、`category`、`tags`、`status`、`aliases` 和 `kind`。共享笔记还必须包含 `scope`、`applies_to`；Rule 必须包含 `enforcement`、`load`，Conditional 必须有非空 `triggers`。旧笔记不批量补字段，按 `references/rule-loading.md` 兼容读取。
 - 知识状态只使用 `Active`、`Deprecated`、`Draft`；日期使用当前本地日期 `YYYY-MM-DD`。
 - `00-Index.md`、Sprint 和 Worklog 是可变状态文档；`10–60` 的永久笔记必须使用实际目录名作为 `category`。
 - Worklog 的 `Completed`、`In Progress`、`Blocked` 是工作进度，不是知识状态。不要推断工时、工作量或生产率。
@@ -47,6 +49,13 @@ aliases: ["{Project_Name} MOC"]
 - Recently Completed:
   - {YYYY-MM-DD — Task ID — verified outcome}
 <!-- kb:progress:end -->
+
+## Rule Catalog
+
+<!-- kb:rule-catalog:start -->
+| Source | Status | Applies to | Enforcement | Load | Triggers |
+|---|---|---|---|---|---|
+<!-- kb:rule-catalog:end -->
 
 ## 🧭 Knowledge Map
 
@@ -123,6 +132,7 @@ category: "{10-60 的实际目录名}"
 tags: ["{技术/框架标签}", "{业务或组件标签}"]
 status: {Active | Draft | Deprecated}
 aliases: ["{真实别名}"]
+kind: {Contract | ADR | Runbook | Knowledge | Asset}
 ---
 
 # {Title}
@@ -176,6 +186,13 @@ scope: Shared
 
 # Shared Knowledge Index
 
+## Rule Catalog
+
+<!-- kb:rule-catalog:start -->
+| Source | Status | Applies to | Enforcement | Load | Triggers |
+|---|---|---|---|---|---|
+<!-- kb:rule-catalog:end -->
+
 ## Governance & Rules
 ## Domain & Contracts
 ## Architecture & Patterns
@@ -198,11 +215,77 @@ category: "{Shared 中的实际目录名}"
 tags: ["{共享标签}"]
 status: {Active | Draft | Deprecated}
 aliases: []
+kind: {Contract | ADR | Runbook | Knowledge | Asset}
 scope: Shared
-applies_to: ["*"]
-enforcement: {Mandatory | Default | Advisory}
+applies_to: ["{明确项目名；经授权全局适用时才使用 *}"]
 ---
 ```
+
+### Type-specific body
+
+`kind` 描述内容性质，`category` 仍描述主题目录。ADR 明确决策、备选与代价；Contract 明确接口/领域约定及兼容性验证，强制行为链接对应 Rule；Runbook 明确前提、步骤、验证与回滚；Asset 链接真实脚本或 Skill 及其适用条件。不要把这些内容都强制套成规则正文。
+
+## Rule note
+
+项目规则使用项目 Dashboard 与 `project: "{Project_Name}"`；共享规则使用 `project: "Shared"`、`scope: Shared` 并链接 Shared Index。以下 load/强度/范围必须依据实际需求填写，不能照抄选项串；Always 时省略 triggers。旧 Mandatory 兼容策略见 `references/rule-loading.md`。
+
+```markdown
+---
+title: "{规则标题}"
+date: {YYYY-MM-DD}
+project: "{Project_Name 或 Shared}"
+category: "{实际主题目录名}"
+tags: ["{适用领域}"]
+status: {Active | Draft | Deprecated}
+aliases: []
+kind: Rule
+applies_to: ["{已确认的项目范围}"]
+enforcement: {Mandatory | Default | Advisory}
+load: {Always | Conditional}
+triggers:
+  - "{一条完整适用条件；多个条目为 OR，条目内的 AND 明确写出}"
+---
+
+# {规则标题}
+
+> Index: [[{实际项目或共享索引路径}]]
+
+## Applicability
+
+{适用操作、模块、路径或环境，与 Frontmatter triggers 一致；说明不适用情形。}
+
+## Required Behavior
+
+{具体、可执行的要求。}
+
+## Verification
+
+{检查方法、验收证据、已有技术控制及未验证项。}
+
+## Exceptions
+
+{允许例外的条件与批准依据；没有已批准例外时明确说明。}
+
+## Evidence
+
+{用户确认、实际问题、已有规则来源或其他可核查依据。}
+
+## Change Log
+
+- {YYYY-MM-DD}: {创建或修改的范围、依据和验证结果}
+```
+
+## Rule Catalog
+
+上方 Project Dashboard 和 Shared Index 模板中的 `kb:rule-catalog` 区块是目录格式；每个目标文件只保留一组标记。已存在的 Index 只在授权规则维护时局部补齐该区块，保留其他内容。
+
+每行使用实际来源的 Vault 相对 Wikilink，不复制行为正文：
+
+```markdown
+| [[{来源路径}]] | Active | {项目范围} | Mandatory | Conditional | {完整条件摘要} |
+```
+
+行按来源路径去重。旧 Mandatory 缺少 load 时显示 `Legacy/Always`；Always 的 Triggers 写 `—`。多条件保留 OR/AND 语义；转义表格中的竖线。Catalog 是派生摘要，读取时核对来源元数据，保存时同步，不能只改表格来改变规则。
 
 ## Worklog index
 

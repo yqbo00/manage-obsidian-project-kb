@@ -14,6 +14,8 @@ UI_FIELD_RE = re.compile(r'^  ([a-z_]+):\s*"([^"]*)"\s*$', re.MULTILINE)
 RESOURCE_RE = re.compile(r"`((?:assets|references)/[^`]+)`")
 START_MARKER = "<!-- kb:agents-bridge:start -->"
 END_MARKER = "<!-- kb:agents-bridge:end -->"
+IMPORT_START = '<!-- kb:agent-import:start id="{{Adapter_Id}}" -->'
+IMPORT_END = '<!-- kb:agent-import:end id="{{Adapter_Id}}" -->'
 
 
 def _read(path: Path, errors: list[str]) -> str:
@@ -79,6 +81,10 @@ def validate(skill_dir: Path) -> list[str]:
     required = [
         "agents/openai.yaml",
         "assets/AGENTS-bridge.md",
+        "assets/agent-import-bridge.md",
+        "references/agent-adapters.md",
+        "references/rule-loading.md",
+        "references/upgrade.md",
         "references/markdown-templates.md",
     ]
     for relative in required:
@@ -100,8 +106,20 @@ def validate(skill_dir: Path) -> list[str]:
         if name and f"${name}" not in bridge:
             errors.append("AGENTS bridge must explicitly invoke this skill")
 
+    import_bridge = _read(skill_dir / "assets/agent-import-bridge.md", errors)
+    if import_bridge:
+        if import_bridge.count(IMPORT_START) != 1 or import_bridge.count(IMPORT_END) != 1:
+            errors.append("agent import bridge must contain exactly one matching marker pair")
+        if import_bridge.find(IMPORT_START) > import_bridge.find(IMPORT_END):
+            errors.append("agent import bridge markers are reversed")
+        if import_bridge.count("{{Import_Line}}") != 1:
+            errors.append("agent import bridge must contain exactly one Import_Line placeholder")
+
     required_protocol_tokens = [
         "Schema_Version",
+        '"Schema_Version": 2',
+        "references/agent-adapters.md",
+        "/kb-init --agents",
         "/kb-doctor",
         "{Project_Root}/AGENTS.md",
         "AGENTS.override.md",
@@ -110,6 +128,18 @@ def validate(skill_dir: Path) -> list[str]:
     for token in required_protocol_tokens:
         if token not in text:
             errors.append(f"SKILL.md is missing release protocol token: {token}")
+
+    adapters = _read(skill_dir / "references/agent-adapters.md", errors)
+    for token in [
+        "CanonicalAGENTS",
+        "ManagedBlock",
+        "ImportAGENTS",
+        "claude-code",
+        "零变更、零备份",
+        "不得传给 Shell",
+    ]:
+        if adapters and token not in adapters:
+            errors.append(f"agent adapter protocol is missing safety token: {token}")
 
     templates = _read(skill_dir / "references/markdown-templates.md", errors)
     for heading in [

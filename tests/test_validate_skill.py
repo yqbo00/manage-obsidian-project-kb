@@ -52,6 +52,27 @@ class ValidateSkillTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must match skill name", result.stderr)
 
+    def test_invalid_import_bridge_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target = self.copy_skill(Path(temporary))
+            bridge = target / "assets" / "agent-import-bridge.md"
+            bridge.write_text(
+                bridge.read_text(encoding="utf-8")
+                + '\n<!-- kb:agent-import:start id="{{Adapter_Id}}" -->\n',
+                encoding="utf-8",
+            )
+            result = self.run_validator(target)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("exactly one matching marker pair", result.stderr)
+
+    def test_missing_adapter_protocol_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target = self.copy_skill(Path(temporary))
+            (target / "references" / "agent-adapters.md").unlink()
+            result = self.run_validator(target)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing required resource: references/agent-adapters.md", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
