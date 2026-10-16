@@ -92,13 +92,23 @@ Agent 会询问 Obsidian Vault 路径和项目名称，并在项目根目录创�
 
 已有项目与知识库的用户请按 [本次版本升级手册：规则按需加载（桥接协议 v5）](docs/upgrades/rule-loading-v5.md) 操作，包含客户端更新、项目桥接升级、共享/项目规则整理、验收与回退。
 
-推荐在项目会话中只发送一次：
+**旧用户请直接复制下面这段提示词。旧版还没有 `/kb-upgrade`，需要先由 Agent 安装新版，再继续升级项目：**
 
 ```text
-使用 manage-obsidian-project-kb 执行 /kb-upgrade
+请从 https://github.com/yqbo00/manage-obsidian-project-kb
+的 master 分支获取最新版完整 Skill，更新当前客户端实际使用的
+manage-obsidian-project-kb 安装副本。修改前备份，保留本地定制。
+
+随后重新读取安装后的 SKILL.md 和 references/upgrade.md，
+确认新版已定义 /kb-upgrade，再继续完成当前项目桥接、关联 Shared
+和项目知识库规则的升级，并验证结果。
+
+不要仅执行旧版 /kb-init，也不要在下载安装新版后停止。
+无法确定的规则保留原状，最后报告实际加载路径、获取的提交 ID、
+桥接版本、已完成的迁移和剩余事项。
 ```
 
-Agent 会连续完成来源/版本检查、Skill 更新、当前项目桥接、Shared 与项目规则的保守整理及验收，无需逐步发送命令。不明确的规则保留兼容状态，最后汇总；首次来源不明或宿主要求权限时才补充必要信息。`/kb-upgrade --check` 只检查不修改。旧版还不认识命令时，使用升级手册开头的通用提示词。
+已安装支持升级命令的新版后，后续才可简写为 `使用 manage-obsidian-project-kb 执行 /kb-upgrade`；`/kb-upgrade --check` 只检查不修改。Agent 连续完成版本检查、安装、桥接、规则整理和验收，不需要用户逐步发送命令。不明确的规则保留兼容状态，最后汇总；网络和写入权限仍由客户端控制。
 
 `Mandatory` 表示命中适用条件后必须遵守；`applies_to: ["*"]` 仅表示跨项目适用。规则用 `load: Always | Conditional` 表示加载时机，Conditional 用 `triggers` 写完整适用条件。启动先读 Rule Catalog 并核对来源元数据，再读常驻/命中规则正文；由查询转为修改、构建、部署等操作前重新筛选。一般知识的 5 篇检索限制不适用于命中规则。
 
