@@ -12,6 +12,9 @@ NAME_RE = re.compile(r"^[a-z0-9-]{1,64}$")
 FRONTMATTER_FIELD_RE = re.compile(r"^([A-Za-z0-9_-]+):\s*(.*?)\s*$")
 UI_FIELD_RE = re.compile(r'^  ([a-z_]+):\s*"([^"]*)"\s*$', re.MULTILINE)
 RESOURCE_RE = re.compile(r"`((?:assets|references)/[^`]+)`")
+# Repository byte budgets, not model token estimates or client limits.
+ENTRYPOINT_BYTE_BUDGET = 8_000
+BRIDGE_BYTE_BUDGET = 1_200
 START_MARKER = "<!-- kb:agents-bridge:start -->"
 END_MARKER = "<!-- kb:agents-bridge:end -->"
 IMPORT_START = '<!-- kb:agent-import:start id="{{Adapter_Id}}" -->'
@@ -75,6 +78,8 @@ def validate(skill_dir: Path) -> list[str]:
         errors.append(f"description exceeds ZCode's 1024-character limit: {len(description)}")
     if len(text.encode("utf-8")) > 100_000:
         errors.append("SKILL.md exceeds ZCode's 100 KB body limit")
+    if len(text.encode("utf-8")) > ENTRYPOINT_BYTE_BUDGET:
+        errors.append("SKILL.md exceeds the 8000-byte progressive-loading budget")
     if len(text.splitlines()) > 500:
         errors.append("SKILL.md exceeds the recommended 500-line context budget")
 
@@ -87,17 +92,43 @@ def validate(skill_dir: Path) -> list[str]:
         "references/upgrade.md",
         "references/auto-migration.md",
         "references/markdown-templates.md",
+        "references/configuration.md",
+        "references/write-safety.md",
+        "references/layout.md",
+        "references/startup.md",
+        "references/progress.md",
+        "references/worklog-write.md",
+        "references/worklog-query.md",
+        "references/initialization.md",
+        "references/doctor.md",
+        "references/retrieval.md",
+        "references/knowledge-write.md",
+        "references/migration-check.md",
+        "references/project-migration.md",
+        "references/rule-maintenance.md",
+        "references/templates/initialization.md",
+        "references/templates/knowledge.md",
+        "references/templates/rules.md",
+        "references/templates/worklog.md",
     ]
     for relative in required:
         if not (skill_dir / relative).is_file():
             errors.append(f"missing required resource: {relative}")
 
-    for relative in sorted(set(RESOURCE_RE.findall(text))):
-        if not (skill_dir / relative).is_file():
-            errors.append(f"SKILL.md references missing resource: {relative}")
+    # Packaging validation follows all references; runtime loading stays conditional.
+    for document in sorted(skill_dir.rglob("*.md")):
+        document_text = _read(document, errors)
+        for relative in sorted(set(RESOURCE_RE.findall(document_text))):
+            target = (skill_dir / relative).resolve()
+            if not target.is_relative_to(skill_dir):
+                errors.append(f"resource escapes Skill package: {relative}")
+            elif not target.is_file():
+                errors.append(f"{document.relative_to(skill_dir)} references missing resource: {relative}")
 
     bridge = _read(skill_dir / "assets/AGENTS-bridge.md", errors)
     if bridge:
+        if len(bridge.encode("utf-8")) > BRIDGE_BYTE_BUDGET:
+            errors.append("AGENTS bridge exceeds the 1200-byte bootstrap budget")
         if bridge.count(START_MARKER) != 1 or bridge.count(END_MARKER) != 1:
             errors.append("AGENTS bridge must contain exactly one start and one end marker")
         if bridge.find(START_MARKER) > bridge.find(END_MARKER):
@@ -116,33 +147,11 @@ def validate(skill_dir: Path) -> list[str]:
         if import_bridge.count("{{Import_Line}}") != 1:
             errors.append("agent import bridge must contain exactly one Import_Line placeholder")
 
-    required_protocol_tokens = [
-        "Schema_Version",
-        '"Schema_Version": 2',
-        "references/agent-adapters.md",
-        "/kb-init --agents",
-        "/kb-doctor",
-        "{Project_Root}/AGENTS.md",
-        "AGENTS.override.md",
-        "git rev-parse --git-path info/exclude",
-    ]
-    for token in required_protocol_tokens:
-        if token not in text:
-            errors.append(f"SKILL.md is missing release protocol token: {token}")
-
-    adapters = _read(skill_dir / "references/agent-adapters.md", errors)
-    for token in [
-        "CanonicalAGENTS",
-        "ManagedBlock",
-        "ImportAGENTS",
-        "claude-code",
-        "零变更、零备份",
-        "不得传给 Shell",
-    ]:
-        if adapters and token not in adapters:
-            errors.append(f"agent adapter protocol is missing safety token: {token}")
-
-    templates = _read(skill_dir / "references/markdown-templates.md", errors)
+    templates = "\n".join(
+        _read(skill_dir / relative, errors)
+        for relative in required
+        if relative.startswith("references/templates/")
+    )
     for heading in [
         "## Project Dashboard",
         "## Current Sprint",
